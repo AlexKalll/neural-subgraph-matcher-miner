@@ -186,17 +186,42 @@ class MiningService:
                 shutil.copy(out_path, os.path.join(shared_results_dir, "patterns.pkl"))
                 # Copy to persistent results for latest job context (fixed name)
                 shutil.copy(out_path, os.path.join(persistent_results_dir, "patterns.pkl"))
-            
+
             if os.path.exists(json_path):
                 # Copy to shared results for download
                 shutil.copy(json_path, os.path.join(shared_results_dir, "patterns.json"))
-            
+
+            # 2. Handle Instance Files (when visualize_instances=True)
+            if os.path.exists(instance_pkl_path):
+                # Copy to shared results for download
+                shutil.copy(instance_pkl_path, os.path.join(shared_results_dir, "patterns_all_instances.pkl"))
+                print(f"Copied instance PKL file to shared results", flush=True)
+
+            if os.path.exists(instance_json_path):
+                # Copy to shared results for download
+                shutil.copy(instance_json_path, os.path.join(shared_results_dir, "patterns_all_instances.json"))
+                print(f"Copied instance JSON file to shared results", flush=True)
+
+            # 3. Handle Plot Files and Directories
             plots_cluster_dir = "/app/plots/cluster"
             if os.path.exists(plots_cluster_dir):
+                # Create cluster subdirectory in shared plots
+                shared_cluster_dir = os.path.join(shared_plots_dir, "cluster")
+                os.makedirs(shared_cluster_dir, exist_ok=True)
+
                 for filename in os.listdir(plots_cluster_dir):
-                    src_file = os.path.join(plots_cluster_dir, filename)
-                    if os.path.isfile(src_file):
-                        shutil.copy(src_file, os.path.join(shared_plots_dir, filename))
+                    src_path = os.path.join(plots_cluster_dir, filename)
+                    dst_path = os.path.join(shared_cluster_dir, filename)
+
+                    if os.path.isfile(src_path):
+                        # Copy individual files (representative mode PNG/PDF)
+                        shutil.copy(src_path, dst_path)
+                    elif os.path.isdir(src_path):
+                        # Copy directories (instance mode HTML folders)
+                        if os.path.exists(dst_path):
+                            shutil.rmtree(dst_path)
+                        shutil.copytree(src_path, dst_path)
+                        print(f"Copied instance plot directory: {filename}", flush=True)
             
             print("Results saved to shared volume: {}".format(shared_job_dir), flush=True)
             

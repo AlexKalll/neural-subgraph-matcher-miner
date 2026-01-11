@@ -256,12 +256,21 @@ class GraphDataExtractor:
 
         """
         # Priority order for type determination
-        type_keys = ['type', 'label', 'relation', 'category', 'kind']
-        
+        # 'edge_label' is used by NetworkXWriter from annotation tool
+        type_keys = ['type', 'label', 'edge_label', 'relation', 'relationship', 'edge_type', 'predicate', 'category', 'kind', 'name']
+
         for key in type_keys:
-            if key in edge_data and edge_data[key] is not None:
+            if key in edge_data and edge_data[key] is not None and edge_data[key] != '':
                 return str(edge_data[key])
-        
+
+        # If no type found, try to infer from all available attributes
+        # excluding common non-type attributes
+        excluded_keys = {'source', 'target', 'directed', 'weight', 'x', 'y', 'id', 'source_label', 'target_label'}
+        for key, value in edge_data.items():
+            if key not in excluded_keys and value is not None and value != '':
+                # This might be the type attribute
+                return str(value)
+
         return 'default'
     
     def _generate_node_label(self, node_id: Any, node_data: Dict[str, Any]) -> str:
