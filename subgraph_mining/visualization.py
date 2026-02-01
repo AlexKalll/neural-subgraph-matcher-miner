@@ -612,9 +612,7 @@ def save_and_visualize_all_instances(agent, args):
                         traceback.print_exc()
                 else:
                     logger.warning(f"    ⚠ Skipping visualization (visualizer not available)")
-        
-        ensure_directories()
-        
+                
         base_path = os.path.splitext(args.out_path)[0]
         pkl_path = base_path + '_all_instances.pkl'
         
