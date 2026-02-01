@@ -24,6 +24,18 @@ from torch_geometric.datasets import Planetoid, KarateClub, QM7b
 import torch_geometric.utils as pyg_utils
 
 import torch_geometric.nn as pyg_nn
+
+
+from torch_geometric.datasets import tu_dataset as pyg_tu_dataset
+tu_url = os.environ.get("TU_DATASET_URL", "https://www.chrsmrrs.com/graphkerneldatasets")
+pyg_tu_dataset.url = tu_url
+TUDataset.url = tu_url
+
+
+import matplotlib
+matplotlib.use("Agg")  # Non-interactive backend
+import matplotlib.pyplot as plt
+
 from matplotlib import cm
 
 from common import data
@@ -48,16 +60,11 @@ except ImportError:
     visualize_pattern_graph_ext = None
     visualize_all_pattern_instances = None
 
-
 from subgraph_mining.search_agents import (
     GreedySearchAgent, MCTSSearchAgent, 
     MemoryEfficientMCTSAgent, MemoryEfficientGreedyAgent, 
     BeamSearchAgent
 )
-
-import matplotlib
-matplotlib.use('Agg')  # Non-interactive backend
-import matplotlib.pyplot as plt
 
 import random
 from scipy.io import mmread
@@ -207,7 +214,7 @@ def generate_target_embeddings(dataset, model, args):
     dataset_graph = dataset[0] 
     
     # select seeds from the FULL graph first to ensure we start exactly where intended.
-    all_nodes = sorted(list(dataset_graph.nodes()), key=str)
+    all_nodes = sorted(list(dataset_graph.nodes()))
     
     # Filter out "dead seeds" (isolated nodes) that cannot contain patterns
     # This prevents DeepSnap from crashing on 0-edge subgraphs

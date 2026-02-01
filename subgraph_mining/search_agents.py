@@ -15,6 +15,9 @@ from tqdm import tqdm
 import torch_geometric.utils as pyg_utils
 
 import torch_geometric.nn as pyg_nn
+
+import matplotlib
+matplotlib.use("Agg")
 from matplotlib import cm
 
 from common import data
@@ -298,7 +301,8 @@ def run_greedy_trial(trial_idx):
     start_node = random.choice(list(graph.nodes))
 
     neigh = [start_node]
-    if worker_args.graph_type == "undirected":
+    is_directed = graph.is_directed() if hasattr(graph, "is_directed") else False
+    if worker_args.graph_type == "undirected" or not is_directed:
         frontier = list(set(graph.neighbors(start_node)) - set(neigh))
     elif worker_args.graph_type == "directed":
         frontier = list(set(graph.successors(start_node)) - set(neigh))
@@ -343,7 +347,7 @@ def run_greedy_trial(trial_idx):
         if best_node is None:
             break
 
-        if worker_args.graph_type == "undirected":
+        if worker_args.graph_type == "undirected" or not is_directed:
             frontier = list(((set(frontier) | set(graph.neighbors(best_node))) - visited) - {best_node})
         elif worker_args.graph_type == "directed":
             frontier = list(((set(frontier) | set(graph.successors(best_node))) - visited) - {best_node})      
