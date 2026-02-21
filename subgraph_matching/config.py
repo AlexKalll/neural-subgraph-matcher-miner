@@ -43,6 +43,14 @@ def parse_encoder(parser, arg_str=None):
         help='tag to identify the run')
     enc_parser.add_argument("--graph_pkl_path", type=str, default=None,
                     help="Path to the .pkl file containing the graph to be used for training")
+    enc_parser.add_argument('--node_type_vocab', type=int,
+                        help='Number of node types (0 disables type embeddings)')
+    enc_parser.add_argument('--node_type_dim', type=int,
+                        help='Embedding dimension for node types')
+    enc_parser.add_argument('--edge_type_vocab', type=int,
+                        help='Number of edge types (0 disables relation embeddings)')
+    enc_parser.add_argument('--edge_type_dim', type=int,
+                        help='Embedding dimension for edge types')
 
     enc_parser.set_defaults(conv_type='SAGE',
                         method_type='order',
@@ -65,7 +73,11 @@ def parse_encoder(parser, arg_str=None):
                         model_path="ckpt/model.pt",
                         tag='',
                         val_size=128,
-                        node_anchored=True)
+                        node_anchored=True,
+                        node_type_vocab=0,
+                        node_type_dim=0,
+                        edge_type_vocab=0,
+                        edge_type_dim=0)
 
     #return enc_parser.parse_args(arg_str)
 
