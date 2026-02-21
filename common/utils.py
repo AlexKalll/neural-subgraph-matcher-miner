@@ -244,6 +244,7 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     # Standardize edge attributes
     for u, v in g.edges():
         edge_data = g.edges[u, v]
+        orig_edge_data = graph.edges[u, v] if graph.has_edge(u, v) else {}
 
         # Remove invalid keys
         bad_keys = [k for k in list(edge_data.keys()) if not isinstance(k, str) or k.strip() == "" or isinstance(k, dict)]
@@ -266,10 +267,22 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
         if 'type' in edge_data:
             edge_data['type_str'] = str(edge_data['type'])
             edge_data['type'] = float(hash(str(edge_data['type'])) % 1000)
+
+        # Preserve edge_type_idx for heterogeneous support
+        # (DeepSnap reserves 'edge_type', so we use 'edge_type_idx')
+        if 'edge_type_idx' in orig_edge_data:
+            val = orig_edge_data['edge_type_idx']
+            edge_data['edge_type_idx'] = (
+                val if isinstance(val, torch.Tensor) else torch.tensor(val))
+        elif 'type' in orig_edge_data and 'edge_type_idx' not in edge_data:
+            # Auto-encode edge type string/int to index
+            edge_data['edge_type_idx'] = torch.tensor(
+                abs(hash(str(orig_edge_data['type']))) % 1000)
     
     # Standardize node attributes
     for node in g.nodes():
         node_data = g.nodes[node]
+        orig_node_data = graph.nodes[node] if node in graph.nodes else {}
         
         # Initialize node features if needed
         if anchor is not None:
@@ -285,6 +298,17 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
         # Ensure id exists
         if 'id' not in node_data:
             node_data['id'] = str(node)
+
+        # Preserve node_type_idx for heterogeneous support
+        # (DeepSnap reserves 'node_type', so we use 'node_type_idx')
+        if 'node_type_idx' in orig_node_data:
+            val = orig_node_data['node_type_idx']
+            node_data['node_type_idx'] = (
+                val if isinstance(val, torch.Tensor) else torch.tensor(val))
+        elif 'type' in orig_node_data and 'node_type_idx' not in node_data:
+            # Auto-encode node type string/int to index
+            node_data['node_type_idx'] = torch.tensor(
+                abs(hash(str(orig_node_data['type']))) % 1000)
     
     return g
 
