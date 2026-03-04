@@ -29,6 +29,7 @@ from matplotlib import cm
 from common import data
 from common import models
 from common import utils
+from common import label_vocab
 from common import combined_syn
 from subgraph_mining.config import parse_decoder
 from subgraph_matching.config import parse_encoder
@@ -200,8 +201,8 @@ def generate_target_embeddings(dataset, model, args):
     logger.info(f"Setting up Batch Processing Pipeline (Batch Size: {args.batch_size})")
 
     # Reproducibility
-    random.seed(42)
-    np.random.seed(42)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
 
     dataset_graph = dataset[0] 
     
@@ -1412,6 +1413,11 @@ def main():
         parse_decoder(parser)
         
         args = parser.parse_args()
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(args.seed)
 
         # Ensure user config is respected: clamp so max >= min and out_batch_size >= 1
         min_ps = getattr(args, 'min_pattern_size', 3)
@@ -1515,6 +1521,23 @@ def main():
             size = int(args.dataset.split("-")[-1])
             dataset = make_plant_dataset(size)
             task = 'graph'
+
+        if isinstance(dataset, list) and len(dataset) > 0 and isinstance(dataset[0], (nx.Graph, nx.DiGraph)):
+            node_vocab, edge_vocab, metadata = label_vocab.initialize_or_load_vocabs(
+                dataset,
+                vocab_dir=args.vocab_dir,
+                vocab_version=args.vocab_version,
+                require_vocab=args.require_vocab,
+            )
+            utils.set_label_vocabs(node_vocab, edge_vocab, metadata.get("vocab_version"))
+            logger.info(
+                "Loaded vocab artifacts: version=%s node_labels=%s edge_types=%s",
+                metadata.get("vocab_version"),
+                metadata.get("num_node_labels"),
+                metadata.get("num_edge_types"),
+            )
+        else:
+            utils.set_label_vocabs(None, None, None)
 
         if isinstance(dataset, list) and len(dataset) > 0 and isinstance(dataset[0], (nx.Graph, nx.DiGraph)):
             num_nodes = sum(len(g) for g in dataset)
