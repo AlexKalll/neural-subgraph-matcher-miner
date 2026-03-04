@@ -40,7 +40,8 @@ class OrderEmbedder(nn.Module):
         self.margin = args.margin
         self.use_intersection = False
 
-        self.clf_model = nn.Sequential(nn.Linear(1, 2), nn.LogSoftmax(dim=-1))
+        # Use CrossEntropyLoss on these logits during training.
+        self.clf_model = nn.Linear(1, 2)
 
     def forward(self, emb_as, emb_bs):
         return emb_as, emb_bs
