@@ -139,17 +139,46 @@ class OTFSemanticSynDataSource(DataSource):
     """On-the-fly synthetic datasource with semantic labels and label negatives."""
     def __init__(self, max_size=29, min_size=5, node_anchored=False,
                  semantic_preset="biology", label_neg_ratio=0.5,
-                 label_noise=0.05, hard_negative_ratio=0.5, seed=42):
+                 label_noise=0.05, hard_negative_ratio=0.5, seed=42,
+                 semantic_mix_presets=None, semantic_mix_weights=None):
         self.max_size = max_size
         self.min_size = min_size
         self.node_anchored = node_anchored
-        self.semantic_preset = semantic_preset if semantic_preset in SEMANTIC_PRESETS else "biology"
+        self.semantic_preset = semantic_preset if semantic_preset in SEMANTIC_PRESETS or semantic_preset == "mixed" else "biology"
+        self.semantic_mix_presets = self._resolve_mix_presets(semantic_mix_presets)
+        self.semantic_mix_weights = self._resolve_mix_weights(semantic_mix_weights, self.semantic_mix_presets)
         self.label_neg_ratio = float(max(0.0, min(1.0, label_neg_ratio)))
         self.hard_negative_ratio = float(max(0.0, min(1.0, hard_negative_ratio)))
         self.label_noise = float(max(0.0, min(0.5, label_noise)))
         self.generator = combined_syn.get_generator(np.arange(
             self.min_size + 1, self.max_size + 1))
         self.rng = random.Random(seed)
+
+    def _resolve_mix_presets(self, semantic_mix_presets):
+        if semantic_mix_presets is None:
+            return ["biology", "ecommerce", "social"]
+        if isinstance(semantic_mix_presets, str):
+            items = [x.strip() for x in semantic_mix_presets.split(",") if x.strip()]
+        else:
+            items = list(semantic_mix_presets)
+        items = [x for x in items if x in SEMANTIC_PRESETS]
+        return items if items else ["biology", "ecommerce", "social"]
+
+    def _resolve_mix_weights(self, semantic_mix_weights, presets):
+        if semantic_mix_weights is None:
+            return [1.0 / len(presets)] * len(presets)
+        if isinstance(semantic_mix_weights, str):
+            raw = [x.strip() for x in semantic_mix_weights.split(",") if x.strip()]
+            try:
+                weights = [float(x) for x in raw]
+            except ValueError:
+                return [1.0 / len(presets)] * len(presets)
+        else:
+            weights = [float(x) for x in semantic_mix_weights]
+        if len(weights) != len(presets) or sum(weights) <= 0:
+            return [1.0 / len(presets)] * len(presets)
+        s = float(sum(weights))
+        return [w / s for w in weights]
 
     def gen_data_loaders(self, size, batch_size, train=True,
                          use_distributed_sampling=False):
@@ -171,9 +200,15 @@ class OTFSemanticSynDataSource(DataSource):
         key = "{}->{}".format(src_label, dst_label)
         return sum((i + 1) * ord(c) for i, c in enumerate(key))
 
+    def _choose_active_preset(self):
+        if self.semantic_preset == "mixed":
+            return self.rng.choices(self.semantic_mix_presets, weights=self.semantic_mix_weights, k=1)[0]
+        return self.semantic_preset
+
     def _annotate_graph(self, graph):
         g = graph.copy()
-        preset = SEMANTIC_PRESETS[self.semantic_preset]
+        preset_name = self._choose_active_preset()
+        preset = SEMANTIC_PRESETS[preset_name]
         edge_types = preset["edge_types"]
 
         if len(g.nodes()) == 0:
@@ -205,6 +240,7 @@ class OTFSemanticSynDataSource(DataSource):
             # Keep numeric edge type for DeepSNAP compatibility.
             g.edges[u, v]["type"] = float(edge_type_id)
             g.edges[u, v]["type_id"] = int(edge_type_id)
+        g.graph["semantic_preset"] = preset_name
         return g
 
     def _sample_connected_subgraph(self, graph, size, max_tries=12):

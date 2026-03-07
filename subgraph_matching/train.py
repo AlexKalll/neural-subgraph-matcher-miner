@@ -72,7 +72,9 @@ def make_data_source(args):
                 label_neg_ratio=args.label_neg_ratio,
                 label_noise=args.label_noise,
                 hard_negative_ratio=args.hard_negative_ratio,
-                seed=args.seed)
+                seed=args.seed,
+                semantic_mix_presets=args.semantic_mix_presets,
+                semantic_mix_weights=args.semantic_mix_weights)
         elif toks[1] == "imbalanced":
             data_source = data.OTFSynImbalancedDataSource(
                 node_anchored=args.node_anchored)
