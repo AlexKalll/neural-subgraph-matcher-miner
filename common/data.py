@@ -139,12 +139,13 @@ class OTFSemanticSynDataSource(DataSource):
     """On-the-fly synthetic datasource with semantic labels and label negatives."""
     def __init__(self, max_size=29, min_size=5, node_anchored=False,
                  semantic_preset="biology", label_neg_ratio=0.5,
-                 label_noise=0.05, seed=42):
+                 label_noise=0.05, hard_negative_ratio=0.5, seed=42):
         self.max_size = max_size
         self.min_size = min_size
         self.node_anchored = node_anchored
         self.semantic_preset = semantic_preset if semantic_preset in SEMANTIC_PRESETS else "biology"
         self.label_neg_ratio = float(max(0.0, min(1.0, label_neg_ratio)))
+        self.hard_negative_ratio = float(max(0.0, min(1.0, hard_negative_ratio)))
         self.label_noise = float(max(0.0, min(0.5, label_noise)))
         self.generator = combined_syn.get_generator(np.arange(
             self.min_size + 1, self.max_size + 1))
@@ -280,6 +281,51 @@ class OTFSemanticSynDataSource(DataSource):
                 return sub_a, sub_b
         raise RuntimeError("Failed to generate semantic structural negative")
 
+    def _node_match_semantic(self, a, b):
+        return str(a.get("label", "unknown")) == str(b.get("label", "unknown"))
+
+    def _edge_match_semantic(self, a, b):
+        return int(a.get("type_id", int(a.get("type", 0)))) == int(
+            b.get("type_id", int(b.get("type", 0)))
+        )
+
+    def _is_semantic_subgraph(self, target_graph, query_graph):
+        matcher = nx.algorithms.isomorphism.GraphMatcher(
+            target_graph,
+            query_graph,
+            node_match=self._node_match_semantic,
+            edge_match=self._edge_match_semantic,
+        )
+        return matcher.subgraph_is_isomorphic()
+
+    def _make_hard_negative_from_positive(self, target_graph, query_graph):
+        """
+        Create near-miss semantic negatives by small structural perturbation of query.
+        """
+        for _ in range(8):
+            cand = query_graph.copy()
+            if cand.number_of_nodes() < 3:
+                return None
+            # Randomly add or remove one edge.
+            if self.rng.random() < 0.5 and cand.number_of_edges() > 1:
+                e = self.rng.choice(list(cand.edges()))
+                cand.remove_edge(*e)
+                if not nx.is_connected(cand):
+                    continue
+            else:
+                non_edges = list(nx.non_edges(cand))
+                if not non_edges:
+                    continue
+                u, v = self.rng.choice(non_edges)
+                cand.add_edge(u, v)
+                # inherit semantic type from preset deterministically
+                cand.edges[u, v]["type"] = 1.0
+                cand.edges[u, v]["type_id"] = 1
+                cand.edges[u, v]["edge_type"] = "hard_neg"
+            if not self._is_semantic_subgraph(target_graph, cand):
+                return cand
+        return None
+
     def _corrupt_query_labels(self, query_graph):
         corrupted = query_graph.copy()
         nodes = list(corrupted.nodes())
@@ -309,6 +355,8 @@ class OTFSemanticSynDataSource(DataSource):
         n_neg = batch_size // 2
         n_label_neg = int(round(n_neg * self.label_neg_ratio))
         n_struct_neg = n_neg - n_label_neg
+        n_hard_struct_neg = int(round(n_struct_neg * self.hard_negative_ratio))
+        n_easy_struct_neg = n_struct_neg - n_hard_struct_neg
 
         pos_a, pos_b = [], []
         for _ in range(n_pos):
@@ -317,10 +365,22 @@ class OTFSemanticSynDataSource(DataSource):
             pos_b.append(g_b)
 
         neg_a, neg_b = [], []
-        for _ in range(n_struct_neg):
+        for _ in range(n_easy_struct_neg):
             g_a, g_b = self._sample_structural_negative()
             neg_a.append(g_a)
             neg_b.append(g_b)
+
+        for _ in range(n_hard_struct_neg):
+            idx = self.rng.randrange(len(pos_a))
+            g_a = pos_a[idx].copy()
+            hard_q = self._make_hard_negative_from_positive(g_a, pos_b[idx])
+            if hard_q is None:
+                g_a, hard_q = self._sample_structural_negative()
+            if self.node_anchored:
+                self._set_anchor(g_a, self.rng.choice(list(g_a.nodes())))
+                self._set_anchor(hard_q, self.rng.choice(list(hard_q.nodes())))
+            neg_a.append(g_a)
+            neg_b.append(hard_q)
 
         for _ in range(n_label_neg):
             idx = self.rng.randrange(len(pos_a))

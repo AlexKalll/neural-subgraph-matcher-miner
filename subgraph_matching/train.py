@@ -13,6 +13,7 @@ from queue import PriorityQueue
 import os
 import random
 import time
+import copy
 
 from deepsnap.batch import Batch
 import networkx as nx
@@ -70,6 +71,7 @@ def make_data_source(args):
                 semantic_preset=args.semantic_preset,
                 label_neg_ratio=args.label_neg_ratio,
                 label_noise=args.label_noise,
+                hard_negative_ratio=args.hard_negative_ratio,
                 seed=args.seed)
         elif toks[1] == "imbalanced":
             data_source = data.OTFSynImbalancedDataSource(
@@ -180,12 +182,17 @@ def train_loop(args):
     else:
         clf_opt = None
 
-    data_source = make_data_source(args)
-    loaders = data_source.gen_data_loaders(args.val_size, args.batch_size,
+    train_data_source = make_data_source(args)
+    val_args = args
+    if args.dataset.startswith("syn-semantic") and args.val_semantic_preset:
+        val_args = copy.copy(args)
+        val_args.semantic_preset = args.val_semantic_preset
+    val_data_source = make_data_source(val_args)
+    loaders = val_data_source.gen_data_loaders(args.val_size, args.batch_size,
         train=False, use_distributed_sampling=False)
     test_pts = []
     for batch_target, batch_neg_target, batch_neg_query in zip(*loaders):
-        pos_a, pos_b, neg_a, neg_b = data_source.gen_batch(batch_target,
+        pos_a, pos_b, neg_a, neg_b = val_data_source.gen_batch(batch_target,
             batch_neg_target, batch_neg_query, False)
         if pos_a:
             pos_a = pos_a.to(torch.device("cpu"))
