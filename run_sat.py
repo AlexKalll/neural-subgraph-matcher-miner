@@ -3,6 +3,7 @@ import subprocess
 import time
 import json
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import ScalarFormatter
 import seaborn as sns
@@ -11,9 +12,9 @@ import networkx as nx
 
 # Configuration
 DATASET = "data/ca-GrQc.pkl"
-STRATEGIES = ["beam", "greedy", "mcts"]
+STRATEGIES = ["beam", ]
 TRIALS_GRID = [3, 5]
-NEIGHBORHOODS_GRID = [10, 20]
+NEIGHBORHOODS_GRID = [10]
 MIN_SIZE = 3
 MAX_SIZE = 5
 OUT_BATCH_SIZE = 3
@@ -375,6 +376,19 @@ def main():
                     print(
                         f"Skipping by timeout pruning: {strategy} on {DATASET} with trials={n_trials} neighborhoods={n_neighborhoods}"
                     )
+                    out_path = f"results/assignment_{strategy}_{os.path.splitext(os.path.basename(DATASET))[0]}_t{n_trials}_n{n_neighborhoods}.p"
+                    pruned_result = {
+                        "strategy": strategy,
+                        "dataset": DATASET,
+                        "n_trials": n_trials,
+                        "n_neighborhoods": n_neighborhoods,
+                        "runtime": float(RUN_TIMEOUT_SEC),
+                        "num_patterns": 0,
+                        "status": "timeout",
+                        "out_path": out_path,
+                    }
+                    existing_grid = pd.concat([existing_grid, pd.DataFrame([pruned_result])], ignore_index=True)
+                    append_result_row(EXPERIMENT_RESULTS_CSV, pruned_result)
                     continue
                 result = run_experiment(
                     strategy,
