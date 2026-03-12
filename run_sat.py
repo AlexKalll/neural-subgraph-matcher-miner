@@ -12,8 +12,8 @@ import networkx as nx
 # Configuration
 DATASET = "data/bitcoin_alpha_graph.pkl"
 STRATEGIES = ["beam", "mcts"]
-TRIALS_GRID = [3, 5]
-NEIGHBORHOODS_GRID = [10]
+TRIALS_GRID = [3, 5, 10]
+NEIGHBORHOODS_GRID = [10, 20, 50]
 MIN_SIZE = 3
 MAX_SIZE = 5
 OUT_BATCH_SIZE = 3
@@ -22,10 +22,10 @@ RUN_TIMEOUT_SEC = 400
 SKIP_ALREADY_DONE = True
 SKIP_TIMEOUT_RUNS = False
 PRUNE_HARDER_AFTER_TIMEOUT = True
-EXPERIMENT_RESULTS_CSV = "results/btc_assignment_experiment_results.csv"
-BEST_SUMMARY_TXT = "results/btc_assignment_best_summary.txt"
-STRATEGY_VS_RUNTIME_PLOT = "plots/btc_assignment_strategy_vs_runtime.png"
-CONFIG_VS_PATTERNS_PLOT = "plots/btc_assignment_config_vs_patterns.png"
+EXPERIMENT_RESULTS_CSV = "results/btc_experiment_results.csv"
+BEST_SUMMARY_TXT = "results/btc_best_summary.txt"
+STRATEGY_VS_RUNTIME_PLOT = "plots/btc_strategy_vs_runtime.png"
+CONFIG_VS_PATTERNS_PLOT = "plots/btc_config_vs_patterns.png"
 
 def count_patterns_from_obj(obj):
     """Count mined patterns for common decoder output formats."""
@@ -143,7 +143,7 @@ def run_experiment(strategy, dataset, n_trials, n_neighborhoods, min_pattern_siz
     print(f"Running strategy: {strategy} on {dataset} with {n_trials} trials and {n_neighborhoods} neighborhoods...")
     
     dataset_label = os.path.splitext(os.path.basename(str(dataset)))[0]
-    out_stem = f"results/assignment_{strategy}_{dataset_label}_t{n_trials}_n{n_neighborhoods}"
+    out_stem = f"results/{strategy}_{dataset_label}_t{n_trials}_n{n_neighborhoods}"
     out_path = f"{out_stem}.p"
     all_instances_json_path = f"{out_stem}_all_instances.json"
     
@@ -174,7 +174,7 @@ def run_experiment(strategy, dataset, n_trials, n_neighborhoods, min_pattern_siz
             timeout=RUN_TIMEOUT_SEC,
         )
         runtime = time.time() - start_time
-        # Prefer all-instances count for assignment analysis; fallback to .p parsing.
+        # Prefer all-instances count for analysis; fallback to .p parsing.
         num_patterns = count_instances_from_all_instances_json(all_instances_json_path)
         if num_patterns is None:
             num_patterns = count_patterns_from_output(out_path)
