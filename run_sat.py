@@ -3,7 +3,6 @@ import subprocess
 import time
 import json
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import ScalarFormatter
 import seaborn as sns
@@ -185,7 +184,7 @@ def run_experiment(strategy, dataset, n_trials, n_neighborhoods, min_pattern_siz
             "dataset": dataset,
             "n_trials": n_trials,
             "n_neighborhoods": n_neighborhoods,
-            "runtime": runtime,
+            "runtime(sec)": runtime,
             "num_patterns": num_patterns,
             "status": "success",
             "out_path": out_path,
@@ -197,10 +196,10 @@ def run_experiment(strategy, dataset, n_trials, n_neighborhoods, min_pattern_siz
             "dataset": dataset,
             "n_trials": n_trials,
             "n_neighborhoods": n_neighborhoods,
-            "runtime": time.time() - start_time,
+            "runtime(sec)": time.time() - start_time,
             "num_patterns": 0,
             "status": "timeout",
-            "out_path": out_path,
+            "out_path": "N/A",
         }
     except subprocess.CalledProcessError as e:
         print(f"Error running {strategy}: {e.stderr}")
@@ -209,10 +208,10 @@ def run_experiment(strategy, dataset, n_trials, n_neighborhoods, min_pattern_siz
             "dataset": dataset,
             "n_trials": n_trials,
             "n_neighborhoods": n_neighborhoods,
-            "runtime": time.time() - start_time,
+            "runtime(sec)": time.time() - start_time,
             "num_patterns": 0,
             "status": "failed",
-            "out_path": out_path,
+            "out_path": "N/A",
         }
 
 
@@ -304,7 +303,7 @@ def summarize_best(df_grid):
             "n_trials": int(best_config["n_trials"]),
             "n_neighborhoods": int(best_config["n_neighborhoods"]),
             "num_patterns": int(best_config["num_patterns"]),
-            "runtime": float(best_config["runtime"]),
+            "runtime(sec)": float(best_config["runtime"]),
         },
         "best_algorithm": {
             "strategy": best_algorithm["strategy"],
@@ -376,16 +375,15 @@ def main():
                     print(
                         f"Skipping by timeout pruning: {strategy} on {DATASET} with trials={n_trials} neighborhoods={n_neighborhoods}"
                     )
-                    out_path = f"results/assignment_{strategy}_{os.path.splitext(os.path.basename(DATASET))[0]}_t{n_trials}_n{n_neighborhoods}.p"
                     pruned_result = {
                         "strategy": strategy,
                         "dataset": DATASET,
                         "n_trials": n_trials,
                         "n_neighborhoods": n_neighborhoods,
-                        "runtime": float(RUN_TIMEOUT_SEC),
+                        "runtime(sec)": float(RUN_TIMEOUT_SEC),
                         "num_patterns": 0,
                         "status": "timeout",
-                        "out_path": out_path,
+                        "out_path": "N/A",
                     }
                     existing_grid = pd.concat([existing_grid, pd.DataFrame([pruned_result])], ignore_index=True)
                     append_result_row(EXPERIMENT_RESULTS_CSV, pruned_result)
