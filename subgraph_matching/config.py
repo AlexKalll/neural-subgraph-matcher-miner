@@ -67,6 +67,14 @@ def parse_encoder(parser, arg_str=None):
                     help='Prediction mode for order model: clf or margin')
     enc_parser.add_argument('--order_margin_factor', type=float,
                     help='When threshold_mode=margin, classify as positive if score <= margin*factor')
+    enc_parser.add_argument('--encoder_type', type=str,
+                    help='Graph encoder: baseline or rgcn_basis')
+    enc_parser.add_argument('--num_relations', type=int,
+                    help='Maximum number of supported edge relation ids (including UNK/overflow)')
+    enc_parser.add_argument('--num_bases', type=int,
+                    help='Number of basis matrices for rgcn_basis encoder')
+    enc_parser.add_argument('--rel_reg_lambda', type=float,
+                    help='Regularization strength for relation coefficients in rgcn_basis encoder')
 
     enc_parser.set_defaults(conv_type='SAGE',
                         method_type='order',
@@ -101,7 +109,11 @@ def parse_encoder(parser, arg_str=None):
                         label_feature_dim=16,
                         seed=42,
                         order_threshold_mode='clf',
-                        order_margin_factor=0.5)
+                        order_margin_factor=0.5,
+                        encoder_type='baseline',
+                        num_relations=64,
+                        num_bases=8,
+                        rel_reg_lambda=1e-4)
 
     #return enc_parser.parse_args(arg_str)
 
