@@ -13,6 +13,10 @@ def parse_encoder(parser, arg_str=None):
                         help='Training batch size')
     enc_parser.add_argument('--n_layers', type=int,
                         help='Number of graph conv layers')
+    enc_parser.add_argument('--num_relations', type=int,
+                        help='Number of edge relation types (RGCN only)')
+    enc_parser.add_argument('--num_bases', type=int,
+                        help='Number of bases for RGCN basis decomposition')
     enc_parser.add_argument('--hidden_dim', type=int,
                         help='Training hidden size')
     enc_parser.add_argument('--skip', type=str,
@@ -44,10 +48,12 @@ def parse_encoder(parser, arg_str=None):
     enc_parser.add_argument("--graph_pkl_path", type=str, default=None,
                     help="Path to the .pkl file containing the graph to be used for training")
 
-    enc_parser.set_defaults(conv_type='SAGE',
+    enc_parser.set_defaults(conv_type='RGCN',
                         method_type='order',
                         dataset='syn',
                         n_layers=8,
+                        num_relations=1,
+                        num_bases=1,
                         batch_size=16,
                         hidden_dim=64,
                         skip="learnable",

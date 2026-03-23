@@ -85,6 +85,8 @@ class SkipLastGNN(nn.Module):
         super(SkipLastGNN, self).__init__()
         self.dropout = args.dropout
         self.n_layers = args.n_layers
+        self.num_relations = args.num_relations
+        self.num_bases = args.num_bases
 
         if len(feature_preprocess.FEATURE_AUGMENT) > 0:
             self.feat_preprocess = feature_preprocess.Preprocess(input_dim)
@@ -152,6 +154,8 @@ class SkipLastGNN(nn.Module):
             return lambda i, h: pyg_nn.GatedGraphConv(h, n_inner_layers)
         elif model_type == "PNA":
             return pyg_nn.SAGEConv
+        elif model_type == "RGCN":
+            return lambda i, h: pyg_nn.RGCNConv(i, h, self.num_relations, self.num_bases)
         else:
             print("unrecognized model type")
 
@@ -165,6 +169,14 @@ class SkipLastGNN(nn.Module):
                 data = self.feat_preprocess(data)
                 data.preprocessed = True
         x, edge_index, batch = data.node_feature, data.edge_index, data.batch
+        edge_type = None
+        if self.conv_type == "RGCN":
+            if hasattr(data, "edge_type") and data.edge_type is not None:
+                edge_type = data.edge_type
+            else:
+                # Fallback: single relation type for all edges.
+                edge_type = torch.zeros(edge_index.size(1), dtype=torch.long,
+                    device=edge_index.device)
         x = self.pre_mp(x)
 
         all_emb = x.unsqueeze(1)
@@ -180,6 +192,8 @@ class SkipLastGNN(nn.Module):
                     x = torch.cat((self.convs_sum[i](curr_emb, edge_index),
                         self.convs_mean[i](curr_emb, edge_index),
                         self.convs_max[i](curr_emb, edge_index)), dim=-1)
+                elif self.conv_type == "RGCN":
+                    x = self.convs[i](curr_emb, edge_index, edge_type)
                 else:
                     x = self.convs[i](curr_emb, edge_index)
             elif self.skip == 'all':
@@ -187,10 +201,15 @@ class SkipLastGNN(nn.Module):
                     x = torch.cat((self.convs_sum[i](emb, edge_index),
                         self.convs_mean[i](emb, edge_index),
                         self.convs_max[i](emb, edge_index)), dim=-1)
+                elif self.conv_type == "RGCN":
+                    x = self.convs[i](emb, edge_index, edge_type)
                 else:
                     x = self.convs[i](emb, edge_index)
             else:
-                x = self.convs[i](x, edge_index)
+                if self.conv_type == "RGCN":
+                    x = self.convs[i](x, edge_index, edge_type)
+                else:
+                    x = self.convs[i](x, edge_index)
             x = F.relu(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
             emb = torch.cat((emb, x), 1)
@@ -200,7 +219,7 @@ class SkipLastGNN(nn.Module):
         # x = pyg_nn.global_mean_pool(x, batch)
         emb = pyg_nn.global_add_pool(emb, batch)
         emb = self.post_mp(emb)
-        #emb = self.batch_norm(emb)   # TODO: test
+        emb = self.batch_norm(emb)   # TODO: test
         #out = F.log_softmax(emb, dim=1)
         return emb
 
