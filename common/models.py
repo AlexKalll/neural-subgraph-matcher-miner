@@ -83,6 +83,7 @@ class OrderEmbedder(nn.Module):
 class SkipLastGNN(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, args):
         super(SkipLastGNN, self).__init__()
+        self.batch_norm = nn.BatchNorm1d(output_dim)
         self.dropout = args.dropout
         self.n_layers = args.n_layers
         self.num_relations = args.num_relations
@@ -216,11 +217,10 @@ class SkipLastGNN(nn.Module):
             if self.skip == 'learnable':
                 all_emb = torch.cat((all_emb, x.unsqueeze(1)), 1)
 
-        # x = pyg_nn.global_mean_pool(x, batch)
         emb = pyg_nn.global_add_pool(emb, batch)
         emb = self.post_mp(emb)
-        emb = self.batch_norm(emb)   # TODO: test
-        #out = F.log_softmax(emb, dim=1)
+        emb = self.batch_norm(emb)
+        out = F.log_softmax(emb, dim=1)
         return emb
 
     def loss(self, pred, label):
