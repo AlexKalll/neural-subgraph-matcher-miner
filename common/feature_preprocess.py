@@ -280,19 +280,74 @@ class Preprocess(nn.Module):
             raise ValueError('Unknown feature augmentation method {}.'.format(
                     AUGMENT_METHOD))
 
+    def _rebuild_label_feature(self, batch):
+        if not hasattr(batch, "G"):
+            return None
+        device = batch.node_feature.device
+        rows = []
+        feature_dim = 1
+        for key, out_dim in zip(FEATURE_AUGMENT, FEATURE_AUGMENT_OUT_DIMS):
+            if key == "label_feature":
+                feature_dim = out_dim
+                break
+        for graph in batch.G:
+            for _, node_data in graph.nodes(data=True):
+                label_id = int(node_data.get("label_id", 0))
+                if feature_dim <= 1:
+                    rows.append([0.0 if label_id == 0 else 1.0])
+                else:
+                    vec = [0.0] * feature_dim
+                    bucket = 0 if label_id == 0 else 1 + (label_id % (feature_dim - 1))
+                    vec[bucket] = 1.0
+                    rows.append(vec)
+        if not rows:
+            return None
+        feat = torch.tensor(rows, dtype=torch.float, device=device)
+        batch.label_feature = feat
+        return feat
+
+    def _rebuild_text_label_feature(self, batch):
+        if RUNTIME_TEXT_ENCODER is None or not hasattr(batch, "G"):
+            return None
+        device = batch.node_feature.device
+        labels = []
+        for graph in batch.G:
+            for _, node_data in graph.nodes(data=True):
+                labels.append(node_data.get("label", None))
+        if not labels:
+            return None
+        feat = RUNTIME_TEXT_ENCODER.encode_many(labels).to(device)
+        batch.text_label_feature = feat
+        return feat
+
+    def _get_feature_tensor(self, batch, key):
+        feat = getattr(batch, key, None)
+        if feat is None:
+            if key == "label_feature":
+                feat = self._rebuild_label_feature(batch)
+            elif key == "text_label_feature":
+                feat = self._rebuild_text_label_feature(batch)
+        return feat
+
     def forward(self, batch):
         if AUGMENT_METHOD == 'concat':
             feature_list = [batch.node_feature.float()]
             for key in FEATURE_AUGMENT:
-                feat = batch[key].float()
+                feat = self._get_feature_tensor(batch, key)
+                if feat is None:
+                    raise RuntimeError("Feature '{}' is missing from batch and could not be rebuilt".format(key))
+                feat = feat.float()
                 if key in self.concat_projection:
                     feat = self.concat_projection[key](feat)
                 feature_list.append(feat)
             batch.node_feature = torch.cat(feature_list, dim=-1)
         elif AUGMENT_METHOD == 'add':
             for key in FEATURE_AUGMENT:
+                feat = self._get_feature_tensor(batch, key)
+                if feat is None:
+                    raise RuntimeError("Feature '{}' is missing from batch and could not be rebuilt".format(key))
                 batch.node_feature = batch.node_feature + self.module_dict[key](
-                        batch[key].float())
+                        feat.float())
         else:
             raise ValueError('Unknown feature augmentation method {}.'.format(
                     AUGMENT_METHOD))

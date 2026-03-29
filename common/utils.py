@@ -90,6 +90,49 @@ def load_model_metadata(model_path, required=False):
         return json.load(f)
 
 
+def apply_model_metadata_to_args(args, parser=None, keys=None, strict_conflicts=True):
+    if not getattr(args, "model_path", None):
+        return None, {}, {}
+
+    metadata = load_model_metadata(args.model_path, required=False)
+    if not metadata:
+        return None, {}, {}
+
+    candidate_keys = keys or [k for k in metadata.keys() if hasattr(args, k)]
+    applied = {}
+    conflicts = {}
+
+    for key in candidate_keys:
+        if key not in metadata or not hasattr(args, key):
+            continue
+        meta_value = metadata[key]
+        current_value = getattr(args, key)
+        default_value = parser.get_default(key) if parser is not None else None
+
+        if current_value == meta_value:
+            continue
+
+        if parser is not None and current_value == default_value:
+            setattr(args, key, meta_value)
+            applied[key] = meta_value
+        else:
+            conflicts[key] = {
+                "runtime": current_value,
+                "checkpoint": meta_value,
+            }
+
+    if conflicts and strict_conflicts:
+        lines = ["Model metadata conflicts with runtime args:"]
+        for key, values in sorted(conflicts.items()):
+            lines.append(
+                "  {}: runtime={} checkpoint={}".format(
+                    key, values["runtime"], values["checkpoint"])
+            )
+        raise ValueError("\n".join(lines))
+
+    return metadata, applied, conflicts
+
+
 def sample_neigh(graphs, size, graph_type):
     ps = np.array([len(g) for g in graphs], dtype=float)
     ps /= np.sum(ps)

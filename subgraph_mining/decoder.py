@@ -1419,6 +1419,41 @@ def main():
         parse_decoder(parser)
         
         args = parser.parse_args()
+        model_metadata, applied_meta, meta_conflicts = utils.apply_model_metadata_to_args(
+            args,
+            parser=parser,
+            keys=[
+                "semantic_mode",
+                "use_label_features",
+                "label_feature_dim",
+                "label_encoder_backend",
+                "label_encoder_name",
+                "label_encoder_cache_dir",
+                "text_encoder_dim",
+                "text_label_dim",
+                "encoder_type",
+                "num_relations",
+                "num_bases",
+                "rel_reg_lambda",
+                "conv_type",
+                "hidden_dim",
+                "n_layers",
+                "skip",
+                "dropout",
+                "node_anchored",
+                "margin",
+                "order_threshold_mode",
+                "order_margin_factor",
+            ],
+            strict_conflicts=True,
+        )
+        if model_metadata:
+            logger.info("Loaded model metadata: %s", utils.model_metadata_path(args.model_path))
+            if applied_meta:
+                logger.info("Applied model metadata defaults: %s", ", ".join(
+                    "{}={}".format(k, applied_meta[k]) for k in sorted(applied_meta.keys())))
+            if meta_conflicts:
+                logger.warning("Metadata conflicts detected: %s", meta_conflicts)
         use_label_features = getattr(args, "use_label_features", False)
         label_feature_dim = getattr(args, "label_feature_dim", 16)
         feature_preprocess.configure_feature_augment(
