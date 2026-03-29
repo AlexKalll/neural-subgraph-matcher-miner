@@ -835,15 +835,15 @@ def _semantic_node_match(n1, n2):
     return (
         int(n1.get("anchor", 0)) == int(n2.get("anchor", 0))
         and int(n1.get("label_id", 0)) == int(n2.get("label_id", 0))
-        and str(n1.get("label", "unknown")) == str(n2.get("label", "unknown"))
+        and str(utils.node_semantic_label(n1)) == str(utils.node_semantic_label(n2))
     )
 
 
 def _semantic_edge_match(e1, e2):
     return (
         int(e1.get("type_id", 0)) == int(e2.get("type_id", 0))
-        and str(e1.get("type_str", e1.get("type", "unknown")))
-        == str(e2.get("type_str", e2.get("type", "unknown")))
+        and str(utils.edge_semantic_label(e1))
+        == str(utils.edge_semantic_label(e2))
     )
 
 
@@ -1467,6 +1467,15 @@ def main():
                 "artifacts/label_encoder_cache"),
             text_encoder_dim=getattr(args, "text_encoder_dim", 384),
             text_label_dim=getattr(args, "text_label_dim", 64),
+        )
+        utils.configure_semantic_hash(
+            semantic_mode=getattr(args, "semantic_mode", "categorical"),
+            label_encoder_backend=getattr(args, "label_encoder_backend", "auto"),
+            label_encoder_name=getattr(args, "label_encoder_name",
+                "sentence-transformers/all-MiniLM-L6-v2"),
+            label_encoder_cache_dir=getattr(args, "label_encoder_cache_dir",
+                "artifacts/label_encoder_cache"),
+            text_encoder_dim=getattr(args, "text_encoder_dim", 384),
         )
         random.seed(args.seed)
         np.random.seed(args.seed)

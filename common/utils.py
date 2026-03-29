@@ -18,11 +18,16 @@ from tqdm import tqdm
 import warnings
 
 from common import feature_preprocess
+from common import label_encoder
 
 _node_label_vocab = None
 _edge_type_vocab = None
 _vocab_version = None
 MODEL_METADATA_VERSION = "v1"
+_semantic_hash_mode = "categorical"
+_semantic_hash_label_encoder = None
+_semantic_hash_top_k = 4
+_semantic_hash_cache = {}
 
 
 def set_label_vocabs(node_vocab=None, edge_vocab=None, vocab_version=None):
@@ -30,6 +35,32 @@ def set_label_vocabs(node_vocab=None, edge_vocab=None, vocab_version=None):
     _node_label_vocab = node_vocab
     _edge_type_vocab = edge_vocab
     _vocab_version = vocab_version
+
+
+def configure_semantic_hash(
+    semantic_mode="categorical",
+    label_encoder_backend="auto",
+    label_encoder_name="sentence-transformers/all-MiniLM-L6-v2",
+    label_encoder_cache_dir=None,
+    text_encoder_dim=384,
+    text_hash_top_k=4,
+):
+    global _semantic_hash_mode, _semantic_hash_label_encoder
+    global _semantic_hash_top_k, _semantic_hash_cache
+
+    _semantic_hash_mode = semantic_mode or "categorical"
+    _semantic_hash_top_k = max(1, int(text_hash_top_k))
+    _semantic_hash_cache = {}
+
+    if _semantic_hash_mode == "hybrid_text":
+        _semantic_hash_label_encoder = label_encoder.UniversalLabelEncoder(
+            model_name=label_encoder_name,
+            cache_dir=label_encoder_cache_dir,
+            backend=label_encoder_backend,
+            embedding_dim=text_encoder_dim,
+        )
+    else:
+        _semantic_hash_label_encoder = None
 
 
 def build_model_metadata(args):
@@ -173,6 +204,68 @@ def vec_hash(v):
     #v = [np.sum(v) for mask in cached_masks]
     return v
 
+
+def node_semantic_label(node_data):
+    if node_data is None:
+        return None
+    if "semantic_label" in node_data:
+        return node_data.get("semantic_label")
+    return node_data.get("label", None)
+
+
+def edge_semantic_label(edge_data):
+    if edge_data is None:
+        return None
+    for key in ("type_str", "type", "relation", "edge_type", "label", "input_label"):
+        value = edge_data.get(key)
+        if value is not None:
+            return value
+    return None
+
+
+def _text_bucket_signature(text):
+    if _semantic_hash_label_encoder is None:
+        return ()
+    label_text = label_encoder._safe_label_text(text)
+    cached = _semantic_hash_cache.get(label_text)
+    if cached is not None:
+        return cached
+
+    vec = _semantic_hash_label_encoder.encode_many([text])[0].detach().cpu().numpy()
+    if vec.size == 0:
+        sig = ()
+    else:
+        k = min(_semantic_hash_top_k, vec.shape[0])
+        if k <= 0:
+            sig = ()
+        else:
+            order = np.argsort(np.abs(vec))[-k:]
+            order = sorted(order.tolist(), key=lambda idx: (-abs(float(vec[idx])), int(idx)))
+            sig = tuple((int(idx) << 1) | (1 if float(vec[idx]) >= 0 else 0) for idx in order)
+    _semantic_hash_cache[label_text] = sig
+    return sig
+
+
+def _text_bucket_id(text):
+    if _semantic_hash_mode != "hybrid_text":
+        return 0
+    sig = _text_bucket_signature(text)
+    if not sig:
+        return 0
+    return _stable_int("textsig::{}".format(",".join(map(str, sig))))
+
+
+def _node_semantic_mix(node_data):
+    label_id = int(node_data.get("label_id", _stable_label_id(node_semantic_label(node_data))))
+    base = (label_id << 1)
+    if _semantic_hash_mode == "hybrid_text":
+        text_bucket_id = int(node_data.get(
+            "text_label_bucket_id",
+            _text_bucket_id(node_semantic_label(node_data)),
+        ))
+        base ^= ((text_bucket_id << 3) | (text_bucket_id >> 2))
+    return base
+
 def wl_hash(g, dim=64, node_anchored=False):
     g = nx.convert_node_labels_to_integers(g)
     vecs = np.zeros((len(g), dim), dtype=int)
@@ -181,10 +274,8 @@ def wl_hash(g, dim=64, node_anchored=False):
         base = 0
         if node_anchored and node_data.get("anchor", 0) == 1:
             base ^= 1
-       
-        label_id = int(node_data.get("label_id", _stable_label_id(
-            node_data.get("label", "unknown"))))
-        base ^= (label_id << 1)
+
+        base ^= _node_semantic_mix(node_data)
         vecs[v] = base
     for i in range(len(g)):
         newvecs = np.zeros((len(g), dim), dtype=int)
@@ -245,8 +336,10 @@ def _edge_semantic_mix(edge_data, forward):
     if "type_id" in edge_data:
         edge_type_id = int(edge_data["type_id"])
     else:
-        edge_type = edge_data.get("type") or "unknown"
+        edge_type = edge_semantic_label(edge_data) or "unknown"
         edge_type_id = _stable_edge_type_id(edge_type)
+    if _semantic_hash_mode == "hybrid_text":
+        edge_type_id ^= _text_bucket_id(edge_semantic_label(edge_data))
     direction_bias = 11 if forward else 19
     return (edge_type_id * 1315423911) ^ direction_bias
 
@@ -465,10 +558,13 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
             # Default feature if no anchor specified
             node_data['node_feature'] = torch.tensor([1.0])
             
-        # Ensure label exists
+        semantic_label = node_semantic_label(node_data)
         if 'label' not in node_data:
             node_data['label'] = str(node)
-        node_data['label_id'] = int(_stable_label_id(node_data.get('label')))
+        node_data['semantic_label'] = semantic_label
+        node_data['label_id'] = int(_stable_label_id(semantic_label))
+        if _semantic_hash_mode == "hybrid_text":
+            node_data['text_label_bucket_id'] = int(_text_bucket_id(semantic_label))
             
         # Ensure id exists
         if 'id' not in node_data:

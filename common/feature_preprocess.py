@@ -177,7 +177,8 @@ class FeatureAugment(nn.Module):
         def text_label_feature_fun(graph, feature_dim):
             if RUNTIME_TEXT_ENCODER is None:
                 raise RuntimeError("text_label_feature requested but runtime label encoder is not configured")
-            labels = [graph.G.nodes[v].get("label", None) for v in graph.G.nodes]
+            labels = [graph.G.nodes[v].get("semantic_label", graph.G.nodes[v].get("label", None))
+                for v in graph.G.nodes]
             graph.text_label_feature = RUNTIME_TEXT_ENCODER.encode_many(labels)
             return graph
 
@@ -313,7 +314,7 @@ class Preprocess(nn.Module):
         labels = []
         for graph in batch.G:
             for _, node_data in graph.nodes(data=True):
-                labels.append(node_data.get("label", None))
+                labels.append(node_data.get("semantic_label", node_data.get("label", None)))
         if not labels:
             return None
         feat = RUNTIME_TEXT_ENCODER.encode_many(labels).to(device)
