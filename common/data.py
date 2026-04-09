@@ -134,6 +134,34 @@ SEMANTIC_PRESETS = {
     },
 }
 
+UNIVERSAL_NODE_LABEL_WEIGHTS = {
+    "high": [
+        ("Hub Entity", 0.18), ("Gene", 0.12), ("User", 0.12),
+        ("Product", 0.12), ("Organization", 0.10), ("Protein", 0.10),
+        ("Category", 0.09), ("Compound", 0.09), ("Topic", 0.08),
+    ],
+    "mid": [
+        ("Entity", 0.16), ("Document", 0.12), ("Disease", 0.10),
+        ("Book", 0.10), ("Music", 0.08), ("Pathway", 0.08),
+        ("Customer", 0.08), ("Creator", 0.08), ("Anatomy", 0.07),
+        ("Location", 0.07), ("Event", 0.06),
+    ],
+    "low": [
+        ("Leaf Entity", 0.16), ("Review", 0.12), ("Side Effect", 0.10),
+        ("Symptom", 0.10), ("Metabolite", 0.09), ("Tag", 0.09),
+        ("Comment", 0.08), ("Image", 0.07), ("Article", 0.07),
+        ("Video", 0.06), ("Record", 0.06),
+    ],
+}
+
+# R-GCN relation ids are numeric slots. This universal preset deliberately
+# exercises the full default 1..63 relation range so a reusable checkpoint does
+# not leave most relation transforms untrained.
+SEMANTIC_PRESETS["universal"] = {
+    "node_label_weights": UNIVERSAL_NODE_LABEL_WEIGHTS,
+    "edge_types": ["relation_{:02d}".format(i) for i in range(1, 64)],
+}
+
 
 class OTFSemanticSynDataSource(DataSource):
     """On-the-fly synthetic datasource with semantic labels and label negatives."""

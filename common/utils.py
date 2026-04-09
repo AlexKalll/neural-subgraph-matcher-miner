@@ -66,6 +66,10 @@ def configure_semantic_hash(
 def build_model_metadata(args):
     keys = [
         "dataset",
+        "semantic_preset",
+        "semantic_mix_presets",
+        "semantic_mix_weights",
+        "val_semantic_preset",
         "semantic_mode",
         "use_label_features",
         "label_feature_dim",
@@ -514,6 +518,7 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
     for u, v in g.edges():
         edge_data = g.edges[u, v]
         edge_type_raw = edge_semantic_label(edge_data) or "unknown"
+        edge_type_id_raw = edge_data.get("type_id")
 
         # Remove invalid keys
         bad_keys = [k for k in list(edge_data.keys()) if not isinstance(k, str) or k.strip() == "" or isinstance(k, dict)]
@@ -545,8 +550,12 @@ def standardize_graph(graph: nx.Graph, anchor: int = None) -> nx.Graph:
         
         # Deterministic edge-type normalization for semantic mining. Capture the
         # string relation before DeepSNAP-compatible sanitization deletes strings.
-        edge_data['type_id'] = int(_stable_edge_type_id(edge_type_raw))
-        edge_data['type'] = float(edge_data['type_id'])
+        if edge_type_id_raw is not None:
+            edge_type_id = int(edge_type_id_raw)
+        else:
+            edge_type_id = int(_stable_edge_type_id(edge_type_raw))
+        edge_data['type_id'] = edge_type_id
+        edge_data['type'] = float(edge_type_id)
     
     # Standardize node attributes
     for node in g.nodes():
