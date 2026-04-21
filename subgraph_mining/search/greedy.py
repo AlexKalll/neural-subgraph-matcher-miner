@@ -11,6 +11,7 @@ from tqdm import tqdm
 import torch.multiprocessing as mp
 
 from common import utils
+from common import feature_preprocess
 from .base import SearchAgent
 
 mp.set_start_method('spawn', force=True)
@@ -26,6 +27,39 @@ worker_embs = None
 worker_args = None
 
 
+def _configure_worker_runtime(args):
+    use_label_features = (
+        getattr(args, "use_label_features", False)
+        or getattr(args, "semantic_mode", "categorical") == "hybrid_text"
+    )
+    feature_preprocess.configure_feature_augment(
+        include_label_id=use_label_features,
+        label_feature_dim=getattr(args, "label_feature_dim", 16),
+        semantic_mode=getattr(args, "semantic_mode", "categorical"),
+        label_encoder_backend=getattr(args, "label_encoder_backend", "auto"),
+        label_encoder_name=getattr(
+            args, "label_encoder_name", "sentence-transformers/all-MiniLM-L6-v2"
+        ),
+        label_encoder_cache_dir=getattr(
+            args, "label_encoder_cache_dir", "artifacts/label_encoder_cache"
+        ),
+        text_encoder_dim=getattr(args, "text_encoder_dim", 384),
+        text_label_dim=getattr(args, "text_label_dim", 64),
+    )
+    if hasattr(utils, "configure_semantic_hash"):
+        utils.configure_semantic_hash(
+            semantic_mode=getattr(args, "semantic_mode", "categorical"),
+            label_encoder_backend=getattr(args, "label_encoder_backend", "auto"),
+            label_encoder_name=getattr(
+                args, "label_encoder_name", "sentence-transformers/all-MiniLM-L6-v2"
+            ),
+            label_encoder_cache_dir=getattr(
+                args, "label_encoder_cache_dir", "artifacts/label_encoder_cache"
+            ),
+            text_encoder_dim=getattr(args, "text_encoder_dim", 384),
+        )
+
+
 def init_greedy_worker(model, graphs, embs, args):
     """
     Initializer function for each worker process in the pool.
@@ -33,6 +67,7 @@ def init_greedy_worker(model, graphs, embs, args):
     """
     global worker_model, worker_graphs, worker_embs, worker_args
     print(f"[{time.strftime('%H:%M:%S')}] Worker PID {os.getpid()} initializing...", flush=True)
+    _configure_worker_runtime(args)
     worker_model = model
     worker_graphs = graphs
     worker_embs = embs
@@ -47,8 +82,9 @@ def run_greedy_trial(trial_idx):
     """
     global worker_model, worker_graphs, worker_embs, worker_args
 
-    random.seed(int.from_bytes(os.urandom(4), 'little') + trial_idx)
-    np.random.seed(int.from_bytes(os.urandom(4), 'little') + trial_idx)
+    base_seed = int(getattr(worker_args, "seed", 42))
+    random.seed(base_seed + int(trial_idx))
+    np.random.seed(base_seed + int(trial_idx))
 
     ps = np.array([len(g) for g in worker_graphs], dtype=np.float32)
     ps /= np.sum(ps)
@@ -84,9 +120,7 @@ def run_greedy_trial(trial_idx):
             cand_embs = worker_model.emb_model(utils.batch_nx_graphs(
                 cand_neighs, anchors=anchors if worker_args.node_anchored else None))
 
-        best_score = float("inf")
-        best_node = None
-
+        scored = []
         for cand_node, cand_emb in zip(frontier, cand_embs):
             score = 0
             for emb_batch in worker_embs:
@@ -95,15 +129,28 @@ def run_greedy_trial(trial_idx):
                         pred = worker_model.predict((emb_batch.to(utils.get_device()), cand_emb)).unsqueeze(1)
                         score -= torch.sum(torch.argmax(worker_model.clf_model(pred), axis=1)).item()
                     elif worker_args.method_type == "mlp":
-                        pred = worker_model(emb_batch.to(utils.get_device()), cand_emb.unsqueeze(0).expand(len(emb_batch), -1))
+                        pred = worker_model(
+                            emb_batch.to(utils.get_device()),
+                            cand_emb.unsqueeze(0).expand(len(emb_batch), -1),
+                        )
                         score += torch.sum(pred[:, 0]).item()
+            scored.append((score, cand_node))
 
-            if score < best_score:
-                best_score = score
-                best_node = cand_node
-
-        if best_node is None:
+        if not scored:
             break
+
+        scored.sort(key=lambda x: x[0])
+
+        out_bs = max(1, getattr(worker_args, "out_batch_size", 3))
+        n_cand = len(scored)
+        top_k = max(2, min(5, out_bs)) if out_bs >= 2 else 1
+        top_k = min(top_k, n_cand)
+        if n_cand == 1:
+            best_score, best_node = scored[0]
+        elif random.random() < 0.25 and n_cand > 1:
+            best_score, best_node = random.choice(scored)
+        else:
+            best_score, best_node = random.choice(scored[:top_k])
 
         if worker_args.graph_type == "undirected" or not is_directed:
             frontier = list(((set(frontier) | set(graph.neighbors(best_node))) - visited) - {best_node})
@@ -151,14 +198,24 @@ class GreedySearchAgent(SearchAgent):
 
         args_for_pool = range(n_trials)
 
+        def with_miner_progress(iterable, total, phase="search_trials"):
+            for i, x in enumerate(iterable):
+                pct = int((i + 1) / total * 100) if total else 0
+                print(
+                    f"[MINER_PROGRESS] phase={phase} current={i+1} total={total} percent={pct}",
+                    flush=True,
+                )
+                yield x
+
         if self.n_workers > 1:
             print(f"Starting {n_trials} search trials on {self.n_workers} cores...")
             with mp.Pool(processes=self.n_workers, initializer=init_greedy_worker, initargs=init_args) as pool:
-                results = list(tqdm(pool.imap_unordered(run_greedy_trial, args_for_pool), total=n_trials))
+                raw = pool.imap_unordered(run_greedy_trial, args_for_pool)
+                results = list(tqdm(with_miner_progress(raw, n_trials), total=n_trials))
         else:
             print(f"Starting {n_trials} search trials sequentially (n_workers={self.n_workers})...")
             init_greedy_worker(*init_args)
-            results = [run_greedy_trial(i) for i in tqdm(range(n_trials))]
+            results = [run_greedy_trial(i) for i in tqdm(with_miner_progress(range(n_trials), n_trials))]
 
         print("Aggregating results from all worker processes...")
         for trial_patterns, trial_counts in results:

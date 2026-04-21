@@ -54,7 +54,7 @@ class BeamSearchAgent(SearchAgent):
             return float('inf')
 
         with torch.no_grad():
-            anchors = [anchor] if self.node_anchored and anchor else None
+            anchors = [anchor] if self.node_anchored and anchor is not None else None
             emb = self.model.emb_model(utils.batch_nx_graphs([pattern], anchors=anchors)).squeeze(0)
 
             if self.use_fp16:

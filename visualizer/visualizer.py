@@ -18,10 +18,55 @@ from .template_processor import HTMLTemplateProcessor
 from .pattern_utils import select_representative_pattern, generate_pattern_filename
 from .index_generator import IndexHTMLGenerator
 from .utils import clear_visualizations, ensure_directory_exists, validate_graph_data
+from common import utils
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+def _semantic_node_match(n1, n2):
+    return (
+        int(n1.get("anchor", 0)) == int(n2.get("anchor", 0))
+        and int(n1.get("label_id", 0)) == int(n2.get("label_id", 0))
+        and str(utils.node_semantic_label(n1)) == str(utils.node_semantic_label(n2))
+    )
+
+
+def _semantic_edge_match(e1, e2):
+    return (
+        int(e1.get("type_id", 0)) == int(e2.get("type_id", 0))
+        and str(utils.edge_semantic_label(e1))
+        == str(utils.edge_semantic_label(e2))
+    )
+
+
+def _semantic_isomorphic(g1, g2):
+    if g1.is_directed() != g2.is_directed():
+        return False
+    graph_matcher = (
+        nx.algorithms.isomorphism.DiGraphMatcher
+        if g1.is_directed()
+        else nx.algorithms.isomorphism.GraphMatcher
+    )
+    return graph_matcher(
+        g1, g2, node_match=_semantic_node_match, edge_match=_semantic_edge_match
+    ).is_isomorphic()
+
+
+def _split_by_semantic_isomorphism(instances):
+    """Split a hash bucket into exact semantic isomorphism groups."""
+    groups = []
+    for inst in instances:
+        placed = False
+        for group in groups:
+            if _semantic_isomorphic(inst, group[0]):
+                group.append(inst)
+                placed = True
+                break
+        if not placed:
+            groups.append([inst])
+    return groups
 
 def save_instances_to_json(output_data, args, graph_context=None):
     json_results = []
@@ -142,21 +187,41 @@ def save_and_visualize_all_instances(agent, args):
         total_instances = 0
         total_unique_instances = 0
         total_visualizations = 0
+        total_sizes = args.max_pattern_size - args.min_pattern_size + 1
 
-        for size in range(args.min_pattern_size, args.max_pattern_size + 1):
+        out_batch_size = max(1, getattr(args, "out_batch_size", 3))
+        logger.info(
+            "save_and_visualize: using out_batch_size=%s (up to %s patterns per size)",
+            out_batch_size,
+            out_batch_size,
+        )
+
+        for size_idx, size in enumerate(range(args.min_pattern_size, args.max_pattern_size + 1)):
             if size not in agent.counts:
                 logger.debug(f"No patterns found for size {size}")
                 continue
 
+            grouped_patterns = []
+            for wl_hash, instances in agent.counts[size].items():
+                for group_idx, group_instances in enumerate(
+                    _split_by_semantic_isomorphism(instances)
+                ):
+                    grouped_patterns.append(((wl_hash, group_idx), group_instances))
+
             sorted_patterns = sorted(
-                agent.counts[size].items(),
+                grouped_patterns,
                 key=lambda x: len(x[1]),
-                reverse=True
+                reverse=True,
             )
 
-            logger.info(f"Size {size}: {len(sorted_patterns)} unique pattern types")
+            logger.info(
+                "Size %s: %s unique pattern types (taking up to %s)",
+                size,
+                len(sorted_patterns),
+                out_batch_size,
+            )
 
-            for rank, (wl_hash, instances) in enumerate(sorted_patterns[:args.out_batch_size], 1):
+            for rank, (hash_key, instances) in enumerate(sorted_patterns[:out_batch_size], 1):
                 pattern_key = f"size_{size}_rank_{rank}"
                 original_count = len(instances)
 
@@ -252,6 +317,13 @@ def save_and_visualize_all_instances(agent, args):
                         logger.warning(f"    ✗ Visualization failed for {pattern_key}")
                 except Exception as e:
                     logger.error(f"    ✗ Visualization error: {e}")
+
+            current_done = size_idx + 1
+            pct = int(current_done / total_sizes * 100) if total_sizes else 0
+            print(
+                f"[MINER_PROGRESS] phase=saving current={current_done} total={total_sizes} percent={pct}",
+                flush=True,
+            )
 
         base_path = os.path.splitext(args.out_path)[0]
         pkl_path = base_path + '_all_instances.pkl'
