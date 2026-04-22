@@ -177,7 +177,7 @@ class MemoryEfficientMCTSAgent(MCTSSearchAgent):
             embs, node_anchored=node_anchored, analyze=analyze,
             model_type=model_type, out_batch_size=out_batch_size, c_uct=c_uct)
         self.memory_limit = memory_limit
-        self.wl_hash_to_graphs = self._create_lru_cache(maxsize=10000)
+        self.wl_hash_to_graphs = defaultdict(list)
         self.use_fp16 = torch.cuda.is_available()
 
     def _half_tensor(self, tensor):
@@ -185,7 +185,7 @@ class MemoryEfficientMCTSAgent(MCTSSearchAgent):
         return tensor.half() if self.use_fp16 else tensor
 
     def _create_lru_cache(self, maxsize):
-        """Create a size-limited LRU cache for storing graph patterns"""
+        """Deprecated: retained for backward compatibility."""
         return lru_cache(maxsize=maxsize)
 
     def _stream_neighborhood(self, graph, start_node, max_nodes=1000):
@@ -293,5 +293,20 @@ class MemoryEfficientMCTSAgent(MCTSSearchAgent):
                     pattern_hash = utils.wl_hash(pattern,
                         node_anchored=self.node_anchored)
                     self.visit_counts[len(pattern)][pattern_hash] += 1
+                    self.counts[len(pattern)][pattern_hash].append(pattern)
+                    if len(self.wl_hash_to_graphs[pattern_hash]) < 5:
+                        self.wl_hash_to_graphs[pattern_hash].append(pattern)
 
             self.max_size += 1
+
+    def finish_search(self):
+        counts = self.visit_counts
+
+        cand_patterns_uniq = []
+        for pattern_size in range(self.min_pattern_size, self.max_pattern_size + 1):
+            for wl_hash, count in sorted(counts[pattern_size].items(), key=lambda x: x[1], reverse=True)[:self.out_batch_size]:
+                graphs = self.wl_hash_to_graphs.get(wl_hash, [])
+                if graphs:
+                    cand_patterns_uniq.append(random.choice(graphs))
+                    print("- outputting", count, "motifs of size", pattern_size)
+        return cand_patterns_uniq

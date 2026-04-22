@@ -14,8 +14,6 @@ from common import utils
 from common import feature_preprocess
 from .base import SearchAgent
 
-mp.set_start_method('spawn', force=True)
-
 
 def default_dd_list():
     return defaultdict(list)
@@ -175,13 +173,15 @@ def run_greedy_trial(trial_idx):
 class GreedySearchAgent(SearchAgent):
     def __init__(self, min_pattern_size, max_pattern_size, model, dataset,
         embs, node_anchored=False, analyze=False, rank_method="counts",
-        model_type="order", out_batch_size=20, n_beams=1, n_workers=4):
+        model_type="order", out_batch_size=20, n_beams=1, n_workers=4,
+        args=None):
         super().__init__(min_pattern_size, max_pattern_size, model, dataset,
             embs, node_anchored=node_anchored, analyze=analyze,
             model_type=model_type, out_batch_size=out_batch_size)
         self.rank_method = rank_method
         self.n_beams = n_beams
         self.n_workers = n_workers
+        self.args = args
         print("Rank Method:", rank_method)
         if self.n_workers > 1:
             print(f"Using {self.n_workers} worker processes for parallel search.")
@@ -194,28 +194,27 @@ class GreedySearchAgent(SearchAgent):
         self.counts = defaultdict(lambda: defaultdict(list))
         self.n_trials = n_trials
 
+        if self.args is None:
+            raise ValueError("GreedySearchAgent requires args for worker initialization")
         init_args = (self.model, self.dataset, self.embs, self.args)
 
         args_for_pool = range(n_trials)
 
-        def with_miner_progress(iterable, total, phase="search_trials"):
-            for i, x in enumerate(iterable):
-                pct = int((i + 1) / total * 100) if total else 0
-                print(
-                    f"[MINER_PROGRESS] phase={phase} current={i+1} total={total} percent={pct}",
-                    flush=True,
-                )
-                yield x
+        try:
+            if mp.get_start_method(allow_none=True) is None:
+                mp.set_start_method("spawn")
+        except RuntimeError:
+            pass
 
         if self.n_workers > 1:
             print(f"Starting {n_trials} search trials on {self.n_workers} cores...")
             with mp.Pool(processes=self.n_workers, initializer=init_greedy_worker, initargs=init_args) as pool:
                 raw = pool.imap_unordered(run_greedy_trial, args_for_pool)
-                results = list(tqdm(with_miner_progress(raw, n_trials), total=n_trials))
+                results = list(tqdm(raw, total=n_trials))
         else:
             print(f"Starting {n_trials} search trials sequentially (n_workers={self.n_workers})...")
             init_greedy_worker(*init_args)
-            results = [run_greedy_trial(i) for i in tqdm(with_miner_progress(range(n_trials), n_trials))]
+            results = [run_greedy_trial(i) for i in tqdm(range(n_trials))]
 
         print("Aggregating results from all worker processes...")
         for trial_patterns, trial_counts in results:
@@ -274,11 +273,12 @@ class GreedySearchAgent(SearchAgent):
 class MemoryEfficientGreedyAgent(GreedySearchAgent):
     def __init__(self, min_pattern_size, max_pattern_size, model, dataset,
         embs, node_anchored=False, analyze=False, rank_method="counts",
-        model_type="order", out_batch_size=20, batch_size=64):
+        model_type="order", out_batch_size=20, batch_size=64, n_workers=4,
+        args=None):
         super().__init__(min_pattern_size, max_pattern_size, model, dataset,
             embs, node_anchored=node_anchored, analyze=analyze,
             rank_method=rank_method, model_type=model_type,
-            out_batch_size=out_batch_size)
+            out_batch_size=out_batch_size, n_workers=n_workers, args=args)
         self.batch_size = batch_size
         self.use_fp16 = torch.cuda.is_available()
 

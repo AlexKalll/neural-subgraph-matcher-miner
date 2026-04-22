@@ -28,9 +28,6 @@ import torch_geometric.nn as pyg_nn
 
 
 from torch_geometric.datasets import tu_dataset as pyg_tu_dataset
-tu_url = os.environ.get("TU_DATASET_URL", "https://www.chrsmrrs.com/graphkerneldatasets")
-pyg_tu_dataset.url = tu_url
-TUDataset.url = tu_url
 
 
 import matplotlib
@@ -91,6 +88,16 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def configure_tu_url():
+    default_url = "https://www.chrsmrrs.com/graphkerneldatasets"
+    tu_url = os.environ.get("TU_DATASET_URL", default_url)
+    if not tu_url.startswith("https://"):
+        logger.warning("Invalid TU_DATASET_URL scheme: %s; using default.", tu_url)
+        tu_url = default_url
+    pyg_tu_dataset.url = tu_url
+    TUDataset.url = tu_url
 def ensure_directories():
     """Create all required directories if they don't exist."""
     directories = [
@@ -350,8 +357,8 @@ def pattern_growth(dataset, task, args, precomputed_data=None, preloaded_model=N
                 neighs.append(neigh)
                 if args.node_anchored:
                     anchors.append(0)
-                pct = int((j + 1) / n_n * 100) if n_n else 0
-                print(f"[MINER_PROGRESS] phase=sampling current={j+1} total={n_n} percent={pct}", flush=True)
+                if n_n:
+                    _ = int((j + 1) / n_n * 100)
 
     #  Use precomputed embeddings if available
     if precomputed_data:
@@ -396,14 +403,14 @@ def pattern_growth(dataset, task, args, precomputed_data=None, preloaded_model=N
             agent = MemoryEfficientGreedyAgent(args.min_pattern_size, args.max_pattern_size,
                 model, graphs, embs, node_anchored=args.node_anchored,
                 analyze=args.analyze, model_type=args.method_type,
-                out_batch_size=args.out_batch_size, n_workers=args.n_workers)
+                out_batch_size=args.out_batch_size, n_workers=args.n_workers,
+                args=args)
         else:
             agent = GreedySearchAgent(args.min_pattern_size, args.max_pattern_size,
                 model, graphs, embs, node_anchored=args.node_anchored,
                 analyze=args.analyze, model_type=args.method_type,
                 out_batch_size=args.out_batch_size, n_beams=1,
-                n_workers=args.n_workers)
-        agent.args = args
+                n_workers=args.n_workers, args=args)
     
     elif args.search_strategy == "beam":
         agent = BeamSearchAgent(args.min_pattern_size, args.max_pattern_size,
@@ -497,6 +504,8 @@ def pattern_growth(dataset, task, args, precomputed_data=None, preloaded_model=N
 def main():
     try:
         ensure_directories()
+
+        configure_tu_url()
 
         parser = argparse.ArgumentParser(description='Decoder arguments', conflict_handler='resolve')
         parse_encoder(parser)

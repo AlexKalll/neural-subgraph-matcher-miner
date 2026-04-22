@@ -1,6 +1,7 @@
 import os
 import uuid
 import shutil
+from typing import Optional
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from fastapi.responses import JSONResponse
 from ..services.mining_service import MiningService
@@ -11,18 +12,19 @@ router = APIRouter()
 @router.post("/mine")
 def mine(
     graph_file: UploadFile = File(...), 
-    job_id: str = Form(...),
-    min_pattern_size: int = Form(...),
-    max_pattern_size: int = Form(...),
-    min_neighborhood_size: int = Form(...),
-    max_neighborhood_size: int = Form(...),
-    n_neighborhoods: int = Form(...),
-    n_trials: int = Form(...),
-    radius: int = Form(3), # Radius kept with default as removed from pipeline
-    graph_type: str = Form(...),
+    job_id: Optional[str] = Form(None),
+    min_pattern_size: int = Form(3),
+    max_pattern_size: int = Form(5),
+    min_neighborhood_size: int = Form(2),
+    max_neighborhood_size: int = Form(3),
+    n_neighborhoods: int = Form(100),
+    n_trials: int = Form(100),
+    radius: int = Form(3),
+    graph_type: str = Form("directed"),
     search_strategy: str = Form("greedy"),
     sample_method: str = Form("tree"),
-    visualize_instances: bool = Form(...)
+    visualize_instances: bool = Form(False),
+    out_batch_size: int = Form(3),
 ):
     # Validate file
     if not graph_file.filename:
@@ -48,7 +50,8 @@ def mine(
             'graph_type': graph_type,
             'search_strategy': search_strategy,
             'sample_method': sample_method,
-            'visualize_instances': visualize_instances
+            'visualize_instances': visualize_instances,
+            'out_batch_size': out_batch_size,
         }
             
         # Run miner with job_id and config

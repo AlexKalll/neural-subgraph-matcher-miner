@@ -41,39 +41,24 @@ class MiningService:
             ]
 
             if config:
-                if config.get('n_trials'):
-                    cmd.append("--n_trials={}".format(config['n_trials']))
-                
-                if config.get('min_pattern_size'):
-                    cmd.append("--min_pattern_size={}".format(config['min_pattern_size']))
-                    
-                if config.get('max_pattern_size'):
-                    cmd.append("--max_pattern_size={}".format(config['max_pattern_size']))
+                def add_arg(key, flag=None):
+                    if key in config and config[key] is not None:
+                        cmd.append("--{}={}".format(flag or key, config[key]))
 
-                if config.get('min_neighborhood_size'):
-                    cmd.append("--min_neighborhood_size={}".format(config['min_neighborhood_size']))
-                    
-                if config.get('max_neighborhood_size'):
-                    cmd.append("--max_neighborhood_size={}".format(config['max_neighborhood_size']))
-                    
-                if config.get('n_neighborhoods'):
-                    cmd.append("--n_neighborhoods={}".format(config['n_neighborhoods']))
-                
-                if config.get('graph_type'):
-                    cmd.append("--graph_type={}".format(config['graph_type']))
-                    
-                if config.get('radius'):
-                    cmd.append("--radius={}".format(config['radius']))
-                    
-                if config.get('search_strategy'):
-                    cmd.append("--search_strategy={}".format(config['search_strategy']))
-                    
-                if config.get('sample_method'):
-                    cmd.append("--sample_method={}".format(config['sample_method']))
-                    
-                # Default to true as it seems common
+                add_arg("n_trials")
+                add_arg("min_pattern_size")
+                add_arg("max_pattern_size")
+                add_arg("min_neighborhood_size")
+                add_arg("max_neighborhood_size")
+                add_arg("n_neighborhoods")
+                add_arg("graph_type")
+                add_arg("radius")
+                add_arg("search_strategy")
+                add_arg("sample_method")
+                add_arg("out_batch_size")
+
                 cmd.append("--node_anchored")
-                    
+
                 if config.get('visualize_instances', False):
                     cmd.append("--visualize_instances")
             
@@ -171,6 +156,10 @@ class MiningService:
 
             shared_results_dir = os.path.join(shared_job_dir, "results")
             shared_plots_dir = os.path.join(shared_job_dir, "plots")
+            if os.path.exists(shared_results_dir):
+                shutil.rmtree(shared_results_dir)
+            if os.path.exists(shared_plots_dir):
+                shutil.rmtree(shared_plots_dir)
             os.makedirs(shared_results_dir, exist_ok=True)
             os.makedirs(shared_plots_dir, exist_ok=True)
             
@@ -180,48 +169,41 @@ class MiningService:
             os.makedirs(persistent_results_dir, exist_ok=True)
             os.makedirs(persistent_plots_dir, exist_ok=True)
 
-            # 1. Handle Basic Pattern Results
-            if os.path.exists(out_path):
-                # Copy to shared results for download
-                shutil.copy(out_path, os.path.join(shared_results_dir, "patterns.pkl"))
-                # Copy to persistent results for latest job context (fixed name)
-                shutil.copy(out_path, os.path.join(persistent_results_dir, "patterns.pkl"))
+            visualize_instances = bool(config.get('visualize_instances', False)) if config else False
 
-            if os.path.exists(json_path):
-                # Copy to shared results for download
-                shutil.copy(json_path, os.path.join(shared_results_dir, "patterns.json"))
+            # 1. Handle Results
+            if visualize_instances:
+                if os.path.exists(instance_pkl_path):
+                    shutil.copy(instance_pkl_path, os.path.join(shared_results_dir, "patterns_all_instances.pkl"))
+                    shutil.copy(instance_pkl_path, os.path.join(persistent_results_dir, "patterns_all_instances.pkl"))
+                if os.path.exists(instance_json_path):
+                    shutil.copy(instance_json_path, os.path.join(shared_results_dir, "patterns_all_instances.json"))
+                    shutil.copy(instance_json_path, os.path.join(persistent_results_dir, "patterns_all_instances.json"))
+            else:
+                if os.path.exists(out_path):
+                    shutil.copy(out_path, os.path.join(shared_results_dir, "patterns.pkl"))
+                    shutil.copy(out_path, os.path.join(persistent_results_dir, "patterns.pkl"))
+                if os.path.exists(json_path):
+                    shutil.copy(json_path, os.path.join(shared_results_dir, "patterns.json"))
 
-            # 2. Handle Instance Files (when visualize_instances=True)
-            if os.path.exists(instance_pkl_path):
-                # Copy to shared results for download
-                shutil.copy(instance_pkl_path, os.path.join(shared_results_dir, "patterns_all_instances.pkl"))
-                print(f"Copied instance PKL file to shared results", flush=True)
-
-            if os.path.exists(instance_json_path):
-                # Copy to shared results for download
-                shutil.copy(instance_json_path, os.path.join(shared_results_dir, "patterns_all_instances.json"))
-                print(f"Copied instance JSON file to shared results", flush=True)
-
-            # 3. Handle Plot Files and Directories
+            # 2. Handle Plot Files and Directories
             plots_cluster_dir = "/app/plots/cluster"
             if os.path.exists(plots_cluster_dir):
-                # Create cluster subdirectory in shared plots
                 shared_cluster_dir = os.path.join(shared_plots_dir, "cluster")
+                if os.path.exists(shared_cluster_dir):
+                    shutil.rmtree(shared_cluster_dir)
                 os.makedirs(shared_cluster_dir, exist_ok=True)
 
                 for filename in os.listdir(plots_cluster_dir):
                     src_path = os.path.join(plots_cluster_dir, filename)
                     dst_path = os.path.join(shared_cluster_dir, filename)
 
-                    if os.path.isfile(src_path):
-                        # Copy individual files (representative mode PNG/PDF)
-                        shutil.copy(src_path, dst_path)
-                    elif os.path.isdir(src_path):
-                        # Copy directories (instance mode HTML folders)
-                        if os.path.exists(dst_path):
-                            shutil.rmtree(dst_path)
-                        shutil.copytree(src_path, dst_path)
-                        print(f"Copied instance plot directory: {filename}", flush=True)
+                    if visualize_instances:
+                        if os.path.isdir(src_path):
+                            shutil.copytree(src_path, dst_path)
+                    else:
+                        if os.path.isfile(src_path):
+                            shutil.copy(src_path, dst_path)
             
             print("Results saved to shared volume: {}".format(shared_job_dir), flush=True)
             

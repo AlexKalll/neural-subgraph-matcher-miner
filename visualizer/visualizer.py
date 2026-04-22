@@ -319,11 +319,8 @@ def save_and_visualize_all_instances(agent, args):
                     logger.error(f"    ✗ Visualization error: {e}")
 
             current_done = size_idx + 1
-            pct = int(current_done / total_sizes * 100) if total_sizes else 0
-            print(
-                f"[MINER_PROGRESS] phase=saving current={current_done} total={total_sizes} percent={pct}",
-                flush=True,
-            )
+            if total_sizes:
+                _ = int(current_done / total_sizes * 100)
 
         base_path = os.path.splitext(args.out_path)[0]
         pkl_path = base_path + '_all_instances.pkl'

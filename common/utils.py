@@ -181,7 +181,7 @@ def sample_neigh(graphs, size, graph_type):
         is_directed = graph.is_directed() if hasattr(graph, "is_directed") else False
         if graph_type == "undirected" or not is_directed:
             frontier = list(set(graph.neighbors(start_node)) - set(neigh))
-        elif graph_type == "directed":
+        elif graph_type == "directed" and is_directed:
             frontier = list((set(graph.successors(start_node)) | set(graph.predecessors(start_node))) - set(neigh))
         visited = set([start_node])
         while len(neigh) < size and frontier:
@@ -192,7 +192,7 @@ def sample_neigh(graphs, size, graph_type):
             visited.add(new_node)
             if graph_type == "undirected" or not is_directed:
                 frontier += list(graph.neighbors(new_node))
-            elif graph_type == "directed":
+            elif graph_type == "directed" and is_directed:
                 frontier += list(graph.successors(new_node))
                 frontier += list(graph.predecessors(new_node))
             frontier = [x for x in frontier if x not in visited]
