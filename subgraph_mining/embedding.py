@@ -136,7 +136,13 @@ def generate_target_embeddings(dataset, model, args):
     random.seed(42)
     np.random.seed(42)
 
-    dataset_graph = dataset[0] 
+    dataset_graph = dataset[0]
+
+    # PyG 2.x returns Data objects instead of NetworkX graphs
+    if not isinstance(dataset_graph, (nx.Graph, nx.DiGraph)):
+        from torch_geometric.utils import to_networkx
+        is_directed = args.graph_type == "directed"
+        dataset_graph = to_networkx(dataset_graph, to_undirected=not is_directed)
     
     # select seeds from the FULL graph first to ensure we start exactly where intended.
     all_nodes = sorted(list(dataset_graph.nodes()), key=str)

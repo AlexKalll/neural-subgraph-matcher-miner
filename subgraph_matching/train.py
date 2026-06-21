@@ -117,6 +117,8 @@ def train(args, model,in_queue, out_queue):
     out_queue: output queue to an intersection computation worker
     """
     _configure_runtime_features(args)
+    device = utils.get_device()
+    model.to(device)
     scheduler, opt = utils.build_optimizer(args, model.parameters())
     if args.method_type == "order":
         clf_opt = optim.Adam(model.clf_model.parameters(), lr=args.lr)
@@ -186,6 +188,7 @@ def train_loop(args):
     logger = SummaryWriter(comment=args_str)
 
     model = build_model(args)
+    model = model.cpu()
     model.share_memory()
 
     if args.method_type == "order":
@@ -219,6 +222,8 @@ def train_loop(args):
             in_queue, out_queue))
         worker.start()
         workers.append(worker)
+
+    model.to(utils.get_device())
 
     if args.test:
         validation(args, model, test_pts, logger, 0, 0, verbose=True)
