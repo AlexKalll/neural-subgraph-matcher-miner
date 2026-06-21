@@ -13,10 +13,6 @@ def parse_encoder(parser, arg_str=None):
                         help='Training batch size')
     enc_parser.add_argument('--n_layers', type=int,
                         help='Number of graph conv layers')
-    enc_parser.add_argument('--num_relations', type=int,
-                        help='Number of edge relation types (RGCN only)')
-    enc_parser.add_argument('--num_bases', type=int,
-                        help='Number of bases for RGCN basis decomposition')
     enc_parser.add_argument('--hidden_dim', type=int,
                         help='Training hidden size')
     enc_parser.add_argument('--skip', type=str,
@@ -85,15 +81,17 @@ def parse_encoder(parser, arg_str=None):
                     help='When threshold_mode=margin, classify as positive if score <= margin*factor')
     enc_parser.add_argument('--encoder_type', type=str,
                     help='Graph encoder: baseline or rgcn_basis')
+    enc_parser.add_argument('--num_relations', type=int,
+                    help='Maximum number of supported edge relation ids (including UNK/overflow)')
+    enc_parser.add_argument('--num_bases', type=int,
+                    help='Number of basis matrices for rgcn_basis encoder')
     enc_parser.add_argument('--rel_reg_lambda', type=float,
-                    help='Regularization strength for relation coefficients (deprecated)')
+                    help='Regularization strength for relation coefficients')
 
     enc_parser.set_defaults(conv_type='SAGE',
                         method_type='order',
                         dataset='syn',
                         n_layers=8,
-                        num_relations=1,
-                        num_bases=1,
                         batch_size=16,
                         hidden_dim=64,
                         skip="learnable",
@@ -131,6 +129,8 @@ def parse_encoder(parser, arg_str=None):
                         order_threshold_mode='clf',
                         order_margin_factor=0.5,
                         encoder_type='baseline',
+                        num_relations=64,
+                        num_bases=8,
                         rel_reg_lambda=1e-4)
 
     #return enc_parser.parse_args(arg_str)
