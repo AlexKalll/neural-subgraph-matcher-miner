@@ -55,7 +55,7 @@ RUN pip install --no-cache-dir \
 # Other utilities
 RUN pip install --no-cache-dir \
     deepsnap==0.2.1 \
-    networkx==2.4 \
+    networkx \
     test-tube==0.7.5 \
     tqdm==4.43.0 \
     requests \
