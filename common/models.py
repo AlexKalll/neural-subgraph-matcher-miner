@@ -17,24 +17,8 @@ from common import feature_preprocess
 def _build_graph_encoder(input_dim, hidden_dim, args):
     encoder_type = getattr(args, "encoder_type", "baseline")
     if encoder_type == "rgcn_basis":
-        return RGCNBasisGNN(input_dim, hidden_dim, hidden_dim, args)
+        args.conv_type = "RGCN"
     return SkipLastGNN(input_dim, hidden_dim, hidden_dim, args)
-
-
-def _extract_relation_ids(data, num_edges, num_relations):
-    rel_ids = getattr(data, "type_id", None)
-    if rel_ids is None:
-        rel_ids = getattr(data, "type", None)
-    if rel_ids is None:
-        return torch.zeros(num_edges, dtype=torch.long, device=data.edge_index.device)
-    rel_ids = rel_ids.view(-1).to(data.edge_index.device).long()
-    if rel_ids.numel() != num_edges:
-        rel_ids = rel_ids[:num_edges]
-        if rel_ids.numel() < num_edges:
-            pad = torch.zeros(num_edges - rel_ids.numel(), dtype=torch.long,
-                device=data.edge_index.device)
-            rel_ids = torch.cat((rel_ids, pad), dim=0)
-    return torch.clamp(rel_ids, min=0, max=max(0, num_relations - 1))
 
 # GNN -> concat -> MLP graph classification baseline
 class BaselineMLP(nn.Module):
@@ -99,11 +83,7 @@ class OrderEmbedder(nn.Module):
         e[labels == 0] = torch.max(torch.tensor(0.0,
             device=utils.get_device()), margin - e)[labels == 0]
 
-        relation_loss = torch.sum(e)
-        if hasattr(self.emb_model, "relation_regularization"):
-            relation_loss = relation_loss + self.emb_model.relation_regularization()
-
-        return relation_loss
+        return torch.sum(e)
 
 class SkipLastGNN(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, args):
