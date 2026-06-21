@@ -1,5 +1,5 @@
-# Use an official Python 3.7 base image (Debian-based)
-FROM python:3.7-slim
+# Use an official Python 3.10 base image (Debian-based)
+FROM python:3.10-slim
 
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
@@ -21,8 +21,6 @@ RUN apt-get update && apt-get install -y \
     gfortran \
     libopenblas-dev \
     liblapack-dev \
-    libatlas-base-dev \
-    python3-scipy \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -33,35 +31,34 @@ COPY requirements.txt .
 # Upgrade pip/setuptools/wheel
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-RUN pip install --no-cache-dir igraph
-
 # Core numeric stack
-RUN pip install --no-cache-dir numpy==1.21.6
+RUN pip install --no-cache-dir numpy
 
 # Visualization and ML libs
 RUN pip install --no-cache-dir \
-    matplotlib==2.1.1 \
-    scikit-learn==1.0.2 \
-    seaborn==0.9.0
+    matplotlib \
+    scikit-learn \
+    seaborn
 
-# Torch + PyG ecosystem (CPU-only)
-RUN pip install torch==1.4.0+cpu torchvision==0.5.0+cpu \
-    -f https://download.pytorch.org/whl/torch_stable.html
+# Torch + PyG ecosystem (CPU-only, PyG 2.3+ needs no separate scatter/sparse)
+RUN pip install torch==2.0.1+cpu torchvision==0.15.2+cpu \
+    --index-url https://download.pytorch.org/whl/cpu
 
 RUN pip install --no-cache-dir \
-    torch-scatter==2.0.2 \
-    torch-sparse==0.6.1 \
-    torch-cluster==1.5.4 \
-    torch-spline-conv==1.2.0 \
-    torch-geometric==1.4.3 \
-    --find-links https://data.pyg.org/whl/torch-1.4.0+cpu.html
+    torch-scatter \
+    torch-sparse \
+    torch-cluster \
+    torch-spline-conv \
+    --find-links https://data.pyg.org/whl/torch-2.0.1+cpu.html
+
+RUN pip install --no-cache-dir torch-geometric
 
 # Other utilities
 RUN pip install --no-cache-dir \
-    deepsnap==0.1.2 \
-    networkx==2.4 \
-    test-tube==0.7.5 \
-    tqdm==4.43.0 \
+    deepsnap \
+    networkx \
+    test-tube \
+    tqdm \
     requests
 
 # Install FastAPI and related packages
@@ -78,4 +75,3 @@ EXPOSE 5000
 
 # Run the FastAPI app
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000"]
-
