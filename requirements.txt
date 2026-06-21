@@ -1,14 +1,18 @@
-deepsnap == 0.2.1
-matplotlib == 2.1.1
-networkx == 2.4
-scikit_learn == 1.8.0
-scipy == 0.19.1
-seaborn == 0.13.2
-torch == 1.4.0
-torch_geometric == 1.4.3
-test_tube == 0.7.5
-tqdm == 4.67.3
+deepsnap
+igraph
+matplotlib
+networkx
+numpy
+scikit_learn
+scipy
+seaborn
+torch
+torch_geometric
+test_tube
+tqdm
 fastapi
 uvicorn
 python-multipart
 requests
+sentence-transformers
+optuna
