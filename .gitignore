@@ -1,6 +1,7 @@
 __pycache__/
 .python-version
 env/
+venv/
 .env
 log/
 log-*/
