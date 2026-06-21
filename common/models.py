@@ -17,7 +17,7 @@ from common import feature_preprocess
 def _build_graph_encoder(input_dim, hidden_dim, args):
     encoder_type = getattr(args, "encoder_type", "baseline")
     if encoder_type == "rgcn_basis":
-        setattr(args, "conv_type", "RGCN")
+        return RGCNBasisGNN(input_dim, hidden_dim, hidden_dim, args)
     return SkipLastGNN(input_dim, hidden_dim, hidden_dim, args)
 
 
