@@ -67,6 +67,7 @@ def init_greedy_worker(model, graphs, embs, args):
     print(f"[{time.strftime('%H:%M:%S')}] Worker PID {os.getpid()} initializing...", flush=True)
     _configure_worker_runtime(args)
     worker_model = model
+    worker_model.to(utils.get_device())
     worker_graphs = graphs
     worker_embs = embs
     worker_args = args
@@ -196,13 +197,13 @@ class GreedySearchAgent(SearchAgent):
 
         if self.args is None:
             raise ValueError("GreedySearchAgent requires args for worker initialization")
+        self.model = self.model.cpu()
         init_args = (self.model, self.dataset, self.embs, self.args)
 
         args_for_pool = range(n_trials)
 
         try:
-            if mp.get_start_method(allow_none=True) is None:
-                mp.set_start_method("spawn")
+            mp.set_start_method("spawn", force=True)
         except RuntimeError:
             pass
 
