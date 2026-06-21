@@ -1,4 +1,4 @@
-# Use an official Python 3.10 base image (Debian-based)
+# Use an official Python 3.10 base image
 FROM python:3.10-slim
 
 # Prevent interactive prompts
@@ -12,7 +12,6 @@ ENV PIP_NO_BUILD_ISOLATION=1
 # Install system build dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
-    libigraph-dev python3-igraph \
     pkg-config \
     git \
     libfreetype6-dev \
@@ -31,8 +30,10 @@ COPY requirements.txt .
 # Upgrade pip/setuptools/wheel
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
+RUN pip install --no-cache-dir igraph
+
 # Core numeric stack
-RUN pip install --no-cache-dir numpy
+RUN pip install --no-cache-dir 'numpy<2'
 
 # Visualization and ML libs
 RUN pip install --no-cache-dir \
@@ -40,26 +41,27 @@ RUN pip install --no-cache-dir \
     scikit-learn \
     seaborn
 
-# Torch + PyG ecosystem (CPU-only, PyG 2.3+ needs no separate scatter/sparse)
-RUN pip install torch==2.0.1+cpu torchvision==0.15.2+cpu \
-    --index-url https://download.pytorch.org/whl/cpu
+# Torch + PyG ecosystem (CPU-only)
+RUN pip install torch==2.0.1+cpu --index-url https://download.pytorch.org/whl/cpu
 
 RUN pip install --no-cache-dir \
     torch-scatter \
     torch-sparse \
     torch-cluster \
     torch-spline-conv \
+    torch-geometric \
     --find-links https://data.pyg.org/whl/torch-2.0.1+cpu.html
-
-RUN pip install --no-cache-dir torch-geometric
 
 # Other utilities
 RUN pip install --no-cache-dir \
-    deepsnap \
+    deepsnap==0.2.1 \
     networkx \
-    test-tube \
-    tqdm \
-    requests
+    test-tube==0.7.5 \
+    tqdm==4.43.0 \
+    requests \
+    'sentence-transformers>=2.2,<4' \
+    'transformers<4.36' \
+    scipy
 
 # Install FastAPI and related packages
 RUN pip install --no-cache-dir \
